@@ -13,16 +13,17 @@ def GetCreds(component):
 
 def MulticastSendingFilterList(ip, port):
     schema = functions.GetSchema("FilterList")
-    schema['child'] = [MulticastSendingFilter(ip, port)]
+    schema['child'] = [{'filter': MulticastSendingFilter(ip, port)}]
     schema['name'] = "CT MC to {} with {}".format(ip, port)
     schema['description'] = "FilterList to allow the sending of multicast to the address of {} using UDP port {}".format(ip, port)
-    return schema
+    schema.pop('createdOn')
+    return nonulls(schema)
 
 def MulticastSendingFilter(ip, port):
     schema = functions.GetSchema("Filter")
     schema['ipAddress'] = ip
-    schema['qualifier'] = Qualifier(port)
-    return schema
+    schema['qualifier'] = [Qualifier(port)]
+    return nonulls(schema)
 
 def QualifierFilter(port):
     schema = functions.GetSchema("QualifierFilter")
@@ -30,17 +31,33 @@ def QualifierFilter(port):
     schema["remotePort"] = port
     schema["exclude"] = False
     schema["protocol"] = "UDP"
-    return schema
+    return nonulls(schema)
+
+def nonulls(schema):
+    newschema = {}
+    for key in schema:
+        if schema[key] is not None:
+            newschema[key] = schema[key]
+    return newschema
 
 def Qualifier(port):
     schema = functions.GetSchema("Qualifier")
-    schema["filter"] = QualifierFilter(port)
+    schema["filter"] = [QualifierFilter(port)]
     schema["isProtocolQualifier"] = True
     schema["name"] = "MultiCast Sender Port {}".format(port)
-    return schema
+    return nonulls(schema)
 
 def Post(component, resource, data):
     headers = {'Accept':'application/json'}
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-    r = requests.post(url=functions.ImportJsonFile("swagger.json")['servers'][0]['url'].replace('ecoapi-host','localhost')+resource, auth=GetCreds(component), json=data, headers=headers)
+    baseurl = functions.ImportJsonFile("swagger.json")['servers'][0]['url'].replace('ecoapi-host','localhost')
+    url = baseurl + "latest/" + resource
+    print(json.dumps(data, indent=2))
+    r = requests.post(url=url, auth=GetCreds(component), json=data, headers=headers, verify=False)
     return r.text
+
+data = {"name": 'name', "description": 'description', "child": [{"filter": {"ipAddress": "8.8.8.8"}}]}
+
+r = Post("stealth","filterList", MulticastSendingFilterList("244.0.0.50", "50"))
+
+print(r)
